@@ -571,6 +571,7 @@ def render_otp_screen():
 def final_success_screen():
     if st.session_state.get("just_verified", False):
         st.balloons()
+        time.sleep(0.1)  # Tiny delay to allow rendering
         st.session_state["just_verified"] = False
 
     username = st.session_state["name"]
@@ -619,25 +620,7 @@ def final_success_screen():
         animation-delay: 0.4s;
     }}
 
-    /*
-       Slide the Reset Session button up from below 
-       AFTER a 4s delay, with a 1s animation.
-    */
-    @keyframes slideUp {{
-      0% {{
-        transform: translateY(50px);
-        opacity: 0;
-      }}
-      100% {{
-        transform: translateY(0);
-        opacity: 1;
-      }}
-    }}
-    .show-later {{
-      opacity: 0;              /* hidden initially */
-      animation: slideUp 1s ease forwards;
-      animation-delay: 4s;     /* wait 4s before animating */
-    }}
+    
     </style>
 
     <div class="title-wrapper">
@@ -653,8 +636,6 @@ def final_success_screen():
     # 2) Some vertical space below the boxes
     st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
 
-    # 3) The button => inside a div with the "show-later" class => slides up after 4s
-    st.markdown('<div class="show-later" style="text-align: center;">', unsafe_allow_html=True)
 
     # 4) Standard Streamlit button => no ephemeral state => calls reset immediately
     if st.button("Reset Session", key="reset_button_in_success"):
@@ -662,9 +643,8 @@ def final_success_screen():
         st.session_state["name"] = ""
         st.session_state["email"] = ""
         st.session_state["otp_input"] = ""
-        st.rerun()  # or st.stop() + st.experimental_set_query_params if older Streamlit
+        st.stop()  # or st.stop() + st.experimental_set_query_params if older Streamlit
 
-    st.markdown("</div>", unsafe_allow_html=True)
 
 def display_messages_below_title():
     if st.session_state.get("warning_msg"):
