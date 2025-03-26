@@ -20,10 +20,32 @@ MAX_ATTEMPTS = 3
 # 3 background images
 login_bg = "login.png"    # for the login page
 otp_bg = "otpver.png"     # for the OTP screen
-success_bg = "osucc.png"  # for the success screen
+# success_bg = "osucc.png"  # original success => we won't use this directly now
+success_male_bg = "osuccm.png"  # for male
+success_female_bg = "osuccf.png"  # for female
 
 SENDER_EMAIL = os.getenv("EMAIL_USER")
 SENDER_PASSWORD = os.getenv("EMAIL_PASS")
+
+
+########################################
+# A) Hide Streamlit header/footer, remove margins
+########################################
+hide_streamlit_style = """
+    <style>
+    header[data-testid="stHeader"] {
+        display: none;
+    }
+    footer[data-testid="stFooter"] {
+        display: none;
+    }
+    .block-container {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------
 #                GLOBAL STYLE INJECTION
@@ -82,7 +104,7 @@ st.markdown("""
     padding: 5px !important;
     border-radius: 6px !important;
     display: block !important;
-    margin-bottom: 8px !important;
+    margin-bottom: 10px !important;
     white-space: nowrap;
 }
 
@@ -93,9 +115,19 @@ st.markdown("""
     padding: 5px !important;
     border-radius: 8px !important;
     display: block !important;
-    margin-bottom: 8px !important;
+    margin-bottom: 15px !important;
     white-space: nowrap;
 }
+
+/* Change radio label color (and optional font size) */
+div[data-testid="stRadio"] label {
+    color: #4169E1 !important;  /* Pick your color */
+    font-size: 25px !important; /* Optional: adjust label size */
+    font-weight: bold !important;
+}
+
+
+
 
 /* Textboxes => more vibrant look + increased width */
 div[data-baseweb="input"] {
@@ -106,7 +138,7 @@ div[data-baseweb="input"] {
     color: #000 !important;
     height: 40px !important;
     line-height: 30px !important;
-    padding: 0 8px !important;
+    padding: 5px !important;
     font-size: 26px !important;
     margin: 3px 0 !important;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1) !important;
@@ -122,6 +154,8 @@ div[data-baseweb="input"]:hover {
     margin-bottom: 5px !important;
 }
 
+
+
 /* Buttons =>  */
 div.stButton > button {
     background: linear-gradient(135deg, #12f0b5, #FFA500) !important;
@@ -135,11 +169,11 @@ div.stButton > button {
     cursor: pointer !important;
     box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
     transition: 0.4s ease-in-out !important; /* Slightly longer transition for shimmer */
-    margin: 10px auto !important;
+    margin: 4px auto !important;
     display: block !important;
     width: 150px !important;
-    position: relative !important;      /* Needed for shimmer effect */
-    overflow: hidden !important;        /* Hide the shimmer overflow */
+    position: relative !important;
+    overflow: hidden !important; 
 }
 
 /* Shimmer overlay */
@@ -167,7 +201,7 @@ div.stButton > button:hover {
 }
 
 div.stButton > button:hover::after {
-    left: 200% !important;  /* Move shimmer across the button */
+    left: 200% !important;
 }
 
 /* Title backgrounds */
@@ -175,32 +209,10 @@ div.stButton > button:hover::after {
     background: linear-gradient(135deg, #11ffe3, #F08080) !important;
 }
 .otp-title-container {
-    background: linear-gradient(135deg, #56deff, #f2ff59) !important;
+    background: linear-gradient(135deg, #FFF44F,#56deff) !important;
 }
 .success-title-container {
     background: linear-gradient(135deg, #FF1493, #FFB6C1) !important;
-}
-
-/* Inline buttons */
-.inline-buttons {
-    width: 100%;
-    text-align: center;
-}
-.inline-buttons > div.stButton {
-    display: inline-block;
-    vertical-align: middle;
-    width: 32%;
-    margin: 5px;
-}
-
-/* Additional styling for success title to restrict its width and wrap long names */
-.success-title {
-    color: #ffffff !important;
-    font-weight: 800 !important;
-    margin: 0 !important;
-    max-width: 80%;
-    overflow-wrap: break-word;
-    text-shadow: none !important;
 }
 
 </style>
@@ -225,7 +237,7 @@ def init_session():
         st.session_state["max_attempts_reached"] = False
         st.session_state["timer_out"] = False
         st.session_state["otp_input"] = ""
-        st.session_state["otp_expiry"] = None  # Stores OTP expiry timestamp
+        st.session_state["otp_expiry"] = None
         st.session_state["just_verified"] = False
 
 def reset_state():
@@ -244,16 +256,23 @@ def reset_state():
     st.session_state["timer_out"] = False
 
 def is_valid_email(email):
+    import re
     pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     return bool(re.match(pattern, email))
 
-# New function to validate name: must start with a letter and contain only letters and spaces
+# Must start with a letter, contain only letters/spaces
 def is_valid_name(name):
+    import re
     pattern = r"^[A-Za-z][A-Za-z ]*$"
     return bool(re.match(pattern, name))
 
 def send_otp(email, name):
     """Generate & send OTP, then rerun to show countdown."""
+    import random
+    from datetime import datetime
+    from email.mime.text import MIMEText
+    import smtplib
+
     otp = str(random.randint(100000, 999999))
     st.session_state["otp"] = otp
     st.session_state["otp_sent_time"] = datetime.now()
@@ -289,6 +308,8 @@ def send_otp(email, name):
 
 def verify_otp(user_otp):
     """Check user_otp. If correct => set verified => success page."""
+    from datetime import datetime
+
     if not st.session_state["otp"] or st.session_state["timer_expired"]:
         st.session_state["error_msg"] = "⏳ OTP expired/not generated. Request new OTP."
         return
@@ -316,34 +337,42 @@ def verify_otp(user_otp):
             st.session_state["max_attempts_reached"] = True
 
 def set_background(image_path):
+    import base64
     with open(image_path, "rb") as img_file:
         encoded_string = base64.b64encode(img_file.read()).decode()
 
+    # By default we have login_bg, otp_bg, success_bg
+    # If you add more backgrounds for male/female, just rename or create new files
     if image_path == login_bg:
-        bg_size = "70% auto"
-        bg_position = "center center"
+      bg_size = "contain !important"
+      bg_position = "center center"
     elif image_path == otp_bg:
-        bg_size = "70% auto"
+      bg_size = "contain !important"
+      bg_position = "center center"
+    elif image_path == "osuccf.png":  # female success
+        bg_size = "contain !important"
         bg_position = "center center"
-    elif image_path == success_bg:
-        bg_size = "70% auto"
+    elif image_path == "osuccm.png":  # male success
+        bg_size = "contain !important"
         bg_position = "center center"
     else:
         bg_size = "cover"
         bg_position = "center center"
 
     st.markdown(
-        f"""
-        <style>
-        .stApp {{
-            margin-top: 0px;
-            background: url("data:image/png;base64,{encoded_string}") no-repeat {bg_position};
-            background-size: {bg_size};
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+     f"""
+     <style>
+     .stApp {{
+        margin-top: 0px;
+        background: url("data:image/png;base64,{encoded_string}") no-repeat {bg_position};
+        background-size: {bg_size};
+        background-attachment: scroll !important;
+     }}
+     </style>
+     """,
+     unsafe_allow_html=True
+)
+
 
 def render_login_form():
     if st.session_state["otp_sent"] and not st.session_state["verified"]:
@@ -356,10 +385,11 @@ def render_login_form():
         and not st.session_state["timer_out"]
     )
 
+    # Existing Name & Email
     st.session_state["name"] = st.text_input(
         "**Enter your Name:**",
         value=st.session_state.get("name", ""),
-        max_chars=20,  # Restrict user to 20 characters
+        max_chars=20,
         disabled=disable_fields,
         key="name_input"
     )
@@ -368,6 +398,15 @@ def render_login_form():
         value=st.session_state.get("email", ""),
         disabled=disable_fields,
         key="email_input"
+    )
+
+    # 1) NEW: Radio button for Gender
+    st.session_state["gender"] = st.radio(
+        "**Select Gender**",
+        ["Male", "Female"],
+        disabled=disable_fields,
+        horizontal=True,  # side-by-side
+        key="gender_radio"
     )
 
     if st.button("Send OTP", disabled=disable_fields, key="send_otp_button"):
@@ -383,7 +422,7 @@ def render_login_form():
         elif not name_filled:
            st.session_state["warning_msg"] = "⚠️ Please Enter Your Name."
         elif not is_valid_name(st.session_state["name"]):
-           st.session_state["warning_msg"] = "⚠️ Enter Valid Name. Must Start With Letter.<br> ( * ) Only Letters And Spaces Allowed."
+           st.session_state["warning_msg"] = "⚠️ Must Start With Letter.Only Letters, Spaces Allowed."
         elif not email_filled:
            st.session_state["warning_msg"] = "⚠️ Please Enter Your Email."
         elif not is_valid_email(st.session_state["email"]):
@@ -405,34 +444,37 @@ def render_otp_screen():
     st.markdown("""
         <style>
             .otp-title-container {
-                width: 330px !important;
+                position: fixed;
+                width: 350px !important;
                 text-align: left !important;
                 padding: 10px;
                 border-radius: 12px;
                 box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.2);
                 border: 2px solid rgba(255, 255, 255, 0.5);
-                margin-top: -8px !important; /* Put the title at the very top */
-                margin-bottom: 15px !important; /* If you also want no bottom margin */
+                margin-top: 40px !important; /* Put the title at the very top */
+                margin-bottom: 40px !important; /* If you also want no bottom margin */
+                height: 75px !important;
             }
             .otp-title {
                 color: #b5651d;
-                font-size: 25px;
+                font-size: 26px;
                 font-weight: bold;
                 text-shadow: 1px 1px 5px rgba(255, 255, 255, 0.5);
                 margin: 0;
             }
             .error-container {
-                min-height: 6px; /* Larger space to handle bigger error text */
                 margin-bottom: 0;
+                margin-top: 0;
                 text-align: left;
             }
         </style>
     """, unsafe_allow_html=True)
 
-    # Title at the top
     st.markdown('<div class="otp-title-container"><div class="otp-title">🔒 OTP VERIFICATION PAGE</div></div>', unsafe_allow_html=True)
-
-    # Error container placeholder
+    st.markdown('<div style="height: 75px;"></div>',unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
+            
+              
     error_container = st.empty()
     if st.session_state.get("error_msg"):
         error_html = f"""
@@ -446,7 +488,7 @@ def render_otp_screen():
 
     if st.session_state["timer_expired"] or st.session_state["max_attempts_reached"]:
         st.session_state["otp_input"] = ""
-        st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
         st.markdown("""
             <div class="resend-label">
                 🔄 Need New OTP ? Click Resend
@@ -515,7 +557,7 @@ def render_otp_screen():
             timer_placeholder.empty()
             st.rerun()
 
-    st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
     st.session_state["otp_input"] = st.text_input("**Enter your OTP:**", max_chars=6, value="", key="otp_textbox")
     if st.button("Verify OTP", key="verify_button"):
         user_otp = st.session_state["otp_input"].strip()
@@ -526,7 +568,6 @@ def render_otp_screen():
         else:
             verify_otp(user_otp)
 
-
 def final_success_screen():
     if st.session_state.get("just_verified", False):
         st.balloons()
@@ -534,7 +575,7 @@ def final_success_screen():
 
     username = st.session_state["name"]
 
-    
+    # 1) Render your success boxes (unchanged except for your new gradient on box2)
     st.markdown(f"""
     <style>
     .title-wrapper {{
@@ -544,6 +585,7 @@ def final_success_screen():
         flex-direction: column;
         gap: 40px;
         z-index: 9999;
+        align-items: center; /* center horizontally */
     }}
     @keyframes slideInRight {{
       0% {{
@@ -558,14 +600,14 @@ def final_success_screen():
     .title-box {{
         width: 500px;
         align-items: center; 
-        padding: 10x;
+        padding: 10px;
         border-radius: 10px;
         color: #ffffff;
         font-size: 26px;
         font-weight: 700;
         text-align: center;
         box-shadow: 0 0 20px rgba(0, 170, 255, 0.6);
-        border:3px solid #00aaff;
+        border: 3px solid #00aaff;
         animation: slideInRight 0.8s ease forwards;
     }}
     .box1 {{
@@ -573,69 +615,56 @@ def final_success_screen():
         animation-delay: 0.2s;
     }}
     .box2 {{
-        background: linear-gradient(135deg, #32CD32, #02CCFE);
-        animation-delay: 0.2s;
+        background: linear-gradient(135deg, #e189ff, #833200); /* your custom gradient */
+        animation-delay: 0.4s;
     }}
 
-    /* Balloons & party icon container */
-    .balloons {{
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        pointer-events: none;
+    /*
+       Slide the Reset Session button up from below 
+       AFTER a 4s delay, with a 1s animation.
+    */
+    @keyframes slideUp {{
+      0% {{
+        transform: translateY(50px);
+        opacity: 0;
+      }}
+      100% {{
+        transform: translateY(0);
+        opacity: 1;
+      }}
     }}
-    .balloon {{
-        position: absolute;
-        bottom: -150px;
-        width: 40px;
-        height: 60px;
-        border-radius: 50%;
-        animation: floatUp 7s ease-in infinite;
+    .show-later {{
+      opacity: 0;              /* hidden initially */
+      animation: slideUp 1s ease forwards;
+      animation-delay: 4s;     /* wait 4s before animating */
     }}
-    @keyframes floatUp {{
-        0% {{
-            transform: translateY(0) scale(1);
-            opacity: 1;
-        }}
-        95% {{
-            opacity: 1;
-        }}
-        100% {{
-            transform: translateY(-120vh) scale(1.1);
-            opacity: 0;
-        }}
-    }}
-    .balloon1 {{ background: #ff66cc; left: 10%; animation-delay: 0s; }}
-    .balloon2 {{ background: #ffcc00; left: 30%; animation-delay: 2s; }}
-    .balloon3 {{ background: #66ccff; left: 50%; animation-delay: 4s; }}
-    .balloon4 {{ background: #ff99ff; left: 70%; animation-delay: 1s; }}
-    .balloon5 {{ background: #00ff99; left: 90%; animation-delay: 3s; }}
-
-    
     </style>
 
     <div class="title-wrapper">
       <div class="title-box box1">
-        Welcome ! {username}  💐 🎉
+        Welcome ! {username}   🎉
       </div>
       <div class="title-box box2">
-         Access Granted  👍🤝  
+         Access Granted  👍  
       </div>
-    </div>
-
-    <div class="balloons">
-        <div class="balloon balloon1"></div>
-        <div class="balloon balloon2"></div>
-        <div class="balloon balloon3"></div>
-        <div class="balloon balloon4"></div>
-        <div class="balloon balloon5"></div>
-
-        
     </div>
     """, unsafe_allow_html=True)
 
+    # 2) Some vertical space below the boxes
+    st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+
+    # 3) The button => inside a div with the "show-later" class => slides up after 4s
+    st.markdown('<div class="show-later" style="text-align: center;">', unsafe_allow_html=True)
+
+    # 4) Standard Streamlit button => no ephemeral state => calls reset immediately
+    if st.button("Reset Session", key="reset_button_in_success"):
+        reset_state()
+        st.session_state["name"] = ""
+        st.session_state["email"] = ""
+        st.session_state["otp_input"] = ""
+        st.rerun()  # or st.stop() + st.experimental_set_query_params if older Streamlit
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 def display_messages_below_title():
     if st.session_state.get("warning_msg"):
@@ -648,15 +677,19 @@ def display_messages_below_title():
 def main():
     init_session()
     
-    # Set background based on current state
+    # If user is verified => decide background based on gender
     if st.session_state.get("verified", False):
-        set_background(success_bg)
+        if st.session_state.get("gender") == "Male":
+            set_background("osuccm.png")  # e.g. male success
+        else:
+            set_background("osuccf.png")  # e.g. female success
     elif st.session_state.get("otp_sent", False):
         set_background(otp_bg)
     else:
         set_background(login_bg)
 
     # Auto-refresh logic
+    from streamlit_autorefresh import st_autorefresh
     auto_refresh_needed = (
         st.session_state["otp_sent"]
         and not st.session_state["verified"]
@@ -690,10 +723,10 @@ def main():
                     text-align: left !important;
                     padding: 10px;
                     border-radius: 14px;
-                    box-shadow: 0px 6px 14px rgba(0, 0, 0, 0.2);
-                    border: 2px solid rgba(255, 255, 255, 0.5);
-                    margin-bottom: 35px !important;
-                    margin-top: 35px !important;
+                    box-shadow: 0px 6px 14px rgba(0,0,0,0.2);
+                    border: 2px solid rgba(255,255,255,0.5);
+                    margin-bottom: 25px !important;
+                    margin-top: 65px !important;
                     height: 70px !important;
                 }
                 .login-title {
@@ -701,7 +734,7 @@ def main():
                     font-size: 25px;
                     font-weight: 600;
                     letter-spacing: 1px;
-                    text-shadow: 1px 1px 6px rgba(255, 255, 255, 0.5);
+                    text-shadow: 1px 1px 6px rgba(255,255,255,0.5);
                     margin: 0;
                     display: flex;
                     align-items: center;
@@ -728,8 +761,6 @@ def main():
     
     if st.session_state.get("otp_sent", False):
         st.markdown('</div>', unsafe_allow_html=True)
-
-    
 
 if __name__ == "__main__":
     main()
